@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://images.unsplash.com">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -713,239 +714,177 @@
 })();
 
 /* ============================================================
-   3D RENDERER v2 — Back-face culling, Blinn-Phong shading,
-   Hi-DPI, floating animation, specular highlights
+   THREE.JS — ВЕСЫ ПРАВОСУДИЯ
+   WebGL: Z-buffer, MSAA, PBR-материалы, тени, Hi-DPI
 ============================================================ */
 (function(){
+  // Ждём загрузки Three.js если он ещё не готов
+  if(typeof THREE==='undefined'){
+    window.addEventListener('load',()=>init3D());
+  } else { init3D(); }
+  function init3D(){
   const canvas=document.getElementById('threeCanvas');
-  if(!canvas)return;
+  if(!canvas||typeof THREE==='undefined')return;
+
   const W=460,H=480;
-  // Hi-DPI / Retina
-  const DPR=Math.min(window.devicePixelRatio||1,2);
-  canvas.width=W*DPR; canvas.height=H*DPR;
-  canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d');
-  ctx.scale(DPR,DPR);
+  // Renderer
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+  renderer.setSize(W,H); renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 
-  const TAU=Math.PI*2,cos=Math.cos,sin=Math.sin;
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(42,W/H,0.1,200);
+  camera.position.set(0,1.5,14); camera.lookAt(0,0.5,0);
 
-  /* ── Математика ── */
-  const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-  const nrm=v=>{const l=Math.sqrt(dot(v,v))||1;return[v[0]/l,v[1]/l,v[2]/l];};
-  function Ry(a){const c=cos(a),s=sin(a);return[[c,0,s],[0,1,0],[-s,0,c]];}
-  function Rx(a){const c=cos(a),s=sin(a);return[[1,0,0],[0,c,-s],[0,s,c]];}
-  function mm(A,B){return[[A[0][0]*B[0][0]+A[0][1]*B[1][0]+A[0][2]*B[2][0],A[0][0]*B[0][1]+A[0][1]*B[1][1]+A[0][2]*B[2][1],A[0][0]*B[0][2]+A[0][1]*B[1][2]+A[0][2]*B[2][2]],[A[1][0]*B[0][0]+A[1][1]*B[1][0]+A[1][2]*B[2][0],A[1][0]*B[0][1]+A[1][1]*B[1][1]+A[1][2]*B[2][1],A[1][0]*B[0][2]+A[1][1]*B[1][2]+A[1][2]*B[2][2]],[A[2][0]*B[0][0]+A[2][1]*B[1][0]+A[2][2]*B[2][0],A[2][0]*B[0][1]+A[2][1]*B[1][1]+A[2][2]*B[2][1],A[2][0]*B[0][2]+A[2][1]*B[1][2]+A[2][2]*B[2][2]]];}
-  function mv(M,v){return[M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2]];}
+  // Освещение
+  scene.add(new THREE.AmbientLight(0x7090bb,0.5));
+  const key=new THREE.DirectionalLight(0xfff8e8,1.3);
+  key.position.set(6,10,7); key.castShadow=true;
+  key.shadow.mapSize.set(2048,2048);
+  key.shadow.camera.left=-14; key.shadow.camera.right=14;
+  key.shadow.camera.top=14; key.shadow.camera.bottom=-14;
+  scene.add(key);
+  const fill=new THREE.DirectionalLight(0x4060cc,0.38); fill.position.set(-5,4,-5); scene.add(fill);
+  const rim=new THREE.PointLight(0xffd080,0.55,40); rim.position.set(0,8,-6); scene.add(rim);
 
-  /* ── Проекция ── */
-  const FOV=410,CDIST=13.5;
-  function prj(v){const z=v[2]+CDIST;if(z<0.05)return null;const s=FOV/z;return[W/2+v[0]*s,H/2-v[1]*s+18];}
+  // PBR-материалы
+  const mG =new THREE.MeshStandardMaterial({color:0xC9A84C,metalness:0.92,roughness:0.18});
+  const mGS=new THREE.MeshStandardMaterial({color:0xFFD700,metalness:0.96,roughness:0.1});
+  const mSt=new THREE.MeshStandardMaterial({color:0x8ab2cc,metalness:0.68,roughness:0.32});
+  const mB1=new THREE.MeshStandardMaterial({color:0x2e3e5a,metalness:0.35,roughness:0.68});
+  const mB2=new THREE.MeshStandardMaterial({color:0x354469,metalness:0.3,roughness:0.7});
+  const mB3=new THREE.MeshStandardMaterial({color:0x2c3a5c,metalness:0.28,roughness:0.72});
+  const mCo=new THREE.MeshStandardMaterial({color:0xDAA520,metalness:0.9,roughness:0.15});
+  const mCS=new THREE.MeshStandardMaterial({color:0xFFD700,metalness:0.96,roughness:0.08});
+  const mBk=new THREE.MeshStandardMaterial({color:0x8B2020,metalness:0.05,roughness:0.85});
+  const mPg=new THREE.MeshStandardMaterial({color:0xFFF8E7,metalness:0,roughness:0.92});
+  const mSp=new THREE.MeshStandardMaterial({color:0x600808,metalness:0.05,roughness:0.88});
+  const mQl=new THREE.MeshStandardMaterial({color:0xE0E4FF,metalness:0.08,roughness:0.6});
+  const mPe=new THREE.MeshStandardMaterial({color:0xEAE0CA,metalness:0,roughness:0.95});
 
-  /* ── Освещение: ключевой свет + заполняющий + ambient ── */
-  const LKEY=nrm([0.55,0.85,0.5]);
-  const LFIL=nrm([-0.3,0.2,-0.35]);
-  const LHALF=nrm([LKEY[0],LKEY[1],LKEY[2]+1]); // half-vector для Blinn-Phong
-
-  function shade(hex,n){
-    const r0=parseInt(hex.slice(1,3),16),g0=parseInt(hex.slice(3,5),16),b0=parseInt(hex.slice(5,7),16);
-    const amb=0.22;
-    const kd=Math.max(0,dot(n,LKEY))*0.72+Math.max(0,dot(n,LFIL))*0.22;
-    const ks=Math.pow(Math.max(0,dot(n,LHALF)),52)*0.7; // specular highlight
-    const f=amb+kd;
-    return`rgb(${Math.min(255,r0*f+255*ks*0.95)|0},${Math.min(255,g0*f+255*ks*0.82)|0},${Math.min(255,b0*f+255*ks*0.58)|0})`;
+  // Хелперы
+  function mkCyl(rT,rB,h,s,m,px=0,py=0,pz=0,par=scene){
+    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(rT,rB,h,s),m);
+    mesh.position.set(px,py,pz); mesh.castShadow=true; mesh.receiveShadow=true; par.add(mesh); return mesh;
+  }
+  function mkBox(w,h,d,m,px=0,py=0,pz=0,par=scene){
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+    mesh.position.set(px,py,pz); mesh.castShadow=true; mesh.receiveShadow=true; par.add(mesh); return mesh;
+  }
+  function mkTor(R,t,s,m,px=0,py=0,pz=0,ry=0,par=scene){
+    const mesh=new THREE.Mesh(new THREE.TorusGeometry(R,t,7,10),m);
+    mesh.position.set(px,py,pz); mesh.rotation.y=ry; mesh.castShadow=true; par.add(mesh); return mesh;
   }
 
-  /* ── Геометрия ── */
-  let GEO=[];
-  const addF=(v,c,n)=>GEO.push({v,c,n});
-
-  // Вертикальный цилиндр
-  function CYL(cx,cy,cz,r,h,seg,sc,tc,bc){
-    const h2=h/2;
-    for(let i=0;i<seg;i++){
-      const a1=(i/seg)*TAU,a2=((i+1)/seg)*TAU,am=(a1+a2)/2;
-      addF([[cx+cos(a1)*r,cy+h2,cz+sin(a1)*r],[cx+cos(a2)*r,cy+h2,cz+sin(a2)*r],
-            [cx+cos(a2)*r,cy-h2,cz+sin(a2)*r],[cx+cos(a1)*r,cy-h2,cz+sin(a1)*r]],sc,nrm([cos(am),0,sin(am)]));
-    }
-    const tv=[],bv=[];
-    for(let i=0;i<seg;i++){const a=(i/seg)*TAU;tv.push([cx+cos(a)*r,cy+h2,cz+sin(a)*r]);bv.unshift([cx+cos(a)*r,cy-h2,cz+sin(a)*r]);}
-    addF(tv,tc||sc,[0,1,0]); addF(bv,bc||sc,[0,-1,0]);
+  // Чаша (LatheGeometry)
+  function mkBowl(par){
+    const pts=[]; const R=1.56,DEP=0.62,N=14;
+    for(let i=0;i<=N;i++){const t=i/N; pts.push(new THREE.Vector2(t*R,-t*t*DEP));}
+    pts.push(new THREE.Vector2(R*0.93,-DEP*0.35));
+    const m=new THREE.Mesh(new THREE.LatheGeometry(pts,32),mG);
+    m.castShadow=true; m.receiveShadow=true; par.add(m); return m;
   }
 
-  // Балка весов (горизонтальный цилиндр, ось X, наклон angle вокруг Z)
-  function BEAM(cx,cy,cz,hL,r,seg,angle,col){
-    const ca=cos(angle),sa=sin(angle);
-    const T=(x,y,z)=>[cx+x*ca-y*sa, cy+x*sa+y*ca, cz+z];
-    const TN=(ny,nz)=>nrm([-ny*sa, ny*ca, nz]);
-    for(let i=0;i<seg;i++){
-      const a1=(i/seg)*TAU,a2=((i+1)/seg)*TAU,am=(a1+a2)/2;
-      const y1=cos(a1)*r,z1=sin(a1)*r,y2=cos(a2)*r,z2=sin(a2)*r;
-      addF([T(-hL,y1,z1),T(hL,y1,z1),T(hL,y2,z2),T(-hL,y2,z2)],col,TN(cos(am),sin(am)));
-    }
-    const lv=[],rv=[];
-    for(let i=0;i<seg;i++){const a=(i/seg)*TAU;lv.push(T(-hL,cos(a)*r,sin(a)*r));rv.unshift(T(hL,cos(a)*r,sin(a)*r));}
-    addF(lv,col,nrm([-ca,-sa,0])); addF(rv,col,nrm([ca,sa,0]));
+  // Главная группа
+  const root=new THREE.Group(); scene.add(root);
+
+  // Основание (3 ступени)
+  mkCyl(2.6,2.8,0.38,32,mB1,0,-5.15,0,root);
+  mkCyl(1.9,2.1,0.3,28,mB2,0,-4.87,0,root);
+  mkCyl(1.2,1.4,0.26,24,mB3,0,-4.62,0,root);
+
+  // Колонна
+  mkCyl(0.135,0.135,9.6,20,mSt,0,0,0,root);
+
+  // Декоративные кольца
+  [-3.0,-1.4,0.2,1.8,3.4].forEach(y=>mkCyl(0.275,0.275,0.22,24,mG,0,y,0,root));
+
+  // Навершие
+  mkCyl(0.22,0.22,0.6,20,mSt,0,4.05,0,root);
+  mkCyl(0.44,0.44,0.68,28,mGS,0,4.55,0,root);
+  mkCyl(0.12,0.22,0.28,18,mG,0,4.97,0,root);
+
+  // Балка (pivot group)
+  const beamG=new THREE.Group(); beamG.position.set(0,3.7,0); root.add(beamG);
+  mkCyl(0.26,0.26,0.34,22,mGS,0,0,0,beamG); // шарнир
+  const beamMesh=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,9.8,18),mSt);
+  beamMesh.rotation.z=Math.PI/2; beamMesh.castShadow=true; beamG.add(beamMesh);
+  mkCyl(0.28,0.28,0.36,22,mGS,-4.9,0,0,beamG);
+  mkCyl(0.28,0.28,0.36,22,mGS, 4.9,0,0,beamG);
+
+  // Подвески
+  const CLEN=3.05;
+  const lArm=new THREE.Group(); lArm.position.set(-4.9,0,0); beamG.add(lArm);
+  const rArm=new THREE.Group(); rArm.position.set( 4.9,0,0); beamG.add(rArm);
+
+  // Цепи (звенья-торы)
+  for(let i=0;i<11;i++){
+    const yp=-(i+0.5)/11*CLEN;
+    mkTor(0.08,0.025,8,mG,0,yp,0,(i%2)*Math.PI/2,lArm);
+    mkTor(0.08,0.025,8,mG,0,yp,0,(i%2)*Math.PI/2,rArm);
   }
 
-  // Чаша (поверхность вращения)
-  function PAN(cx,cy,cz,r,dep,seg,rings,col){
-    for(let i=0;i<seg;i++){
-      const a1=(i/seg)*TAU,a2=((i+1)/seg)*TAU,am=(a1+a2)/2;
-      const c1=cos(a1),s1=sin(a1),c2=cos(a2),s2=sin(a2);
-      for(let j=0;j<rings;j++){
-        const t1=j/rings,t2=(j+1)/rings,tm=(t1+t2)/2;
-        const r1=t1*r,r2=t2*r,y1=-t1*t1*dep,y2=-t2*t2*dep;
-        addF([[cx+c1*r1,cy+y1,cz+s1*r1],[cx+c2*r1,cy+y1,cz+s2*r1],
-              [cx+c2*r2,cy+y2,cz+s2*r2],[cx+c1*r2,cy+y2,cz+s1*r2]],col,nrm([cos(am),1-tm*1.4,sin(am)]));
-      }
-    }
-    // Золотой ободок
-    for(let i=0;i<seg;i++){
-      const a1=(i/seg)*TAU,a2=((i+1)/seg)*TAU,rr=0.12,am=(a1+a2)/2;
-      addF([[cx+cos(a1)*(r-rr),cy,cz+sin(a1)*(r-rr)],[cx+cos(a2)*(r-rr),cy,cz+sin(a2)*(r-rr)],
-            [cx+cos(a2)*r,cy-rr*0.5,cz+sin(a2)*r],[cx+cos(a1)*r,cy-rr*0.5,cz+sin(a1)*r]],
-           '#FFD700',nrm([cos(am),0.4,sin(am)]));
-    }
-  }
+  // Чаши
+  const lBowl=mkBowl(lArm); lBowl.position.set(0,-CLEN,0);
+  const rBowl=mkBowl(rArm); rBowl.position.set(0,-CLEN,0);
 
-  // Прямоугольник
-  function BOX(cx,cy,cz,w,h,d,ct,cb,cf,ck,cl,cr){
-    const hw=w/2,hh=h/2,hd=d/2;
-    addF([[cx-hw,cy+hh,cz-hd],[cx+hw,cy+hh,cz-hd],[cx+hw,cy+hh,cz+hd],[cx-hw,cy+hh,cz+hd]],ct,[0,1,0]);
-    addF([[cx-hw,cy-hh,cz+hd],[cx+hw,cy-hh,cz+hd],[cx+hw,cy-hh,cz-hd],[cx-hw,cy-hh,cz-hd]],cb||ct,[0,-1,0]);
-    addF([[cx-hw,cy+hh,cz+hd],[cx+hw,cy+hh,cz+hd],[cx+hw,cy-hh,cz+hd],[cx-hw,cy-hh,cz+hd]],cf||ct,[0,0,1]);
-    addF([[cx+hw,cy+hh,cz-hd],[cx-hw,cy+hh,cz-hd],[cx-hw,cy-hh,cz-hd],[cx+hw,cy-hh,cz-hd]],ck||ct,[0,0,-1]);
-    addF([[cx-hw,cy+hh,cz-hd],[cx-hw,cy+hh,cz+hd],[cx-hw,cy-hh,cz+hd],[cx-hw,cy-hh,cz-hd]],cl||ct,[-1,0,0]);
-    addF([[cx+hw,cy+hh,cz+hd],[cx+hw,cy+hh,cz-hd],[cx+hw,cy-hh,cz-hd],[cx+hw,cy-hh,cz+hd]],cr||ct,[1,0,0]);
-  }
+  // Монеты (левая чаша)
+  const cGeo=new THREE.CylinderGeometry(0.31,0.31,0.1,20);
+  [[0,0],[0.62,0.18],[-0.62,0.18],[0.3,-0.52],[-0.3,-0.52],[0,0.62],[0.6,-0.22],[-0.58,-0.18]].forEach(([dx,dz],i)=>{
+    const c=new THREE.Mesh(cGeo,i%2===0?mCo:mCS); c.position.set(dx,-CLEN+0.12,dz); c.castShadow=true; lArm.add(c);
+  });
+  [[0.1,0.08],[-0.12,-0.06],[0.44,0.32]].forEach(([dx,dz])=>{
+    const c=new THREE.Mesh(cGeo,mCS); c.position.set(dx,-CLEN+0.22,dz); c.castShadow=true; lArm.add(c);
+  });
 
-  /* ── Физика ── */
+  // Книга (правая чаша)
+  const bkG=new THREE.Group(); bkG.position.set(-0.08,-CLEN+0.19,0); rArm.add(bkG);
+  mkBox(1.18,0.24,0.96,mBk,0,0,0,bkG);
+  mkBox(1.04,0.19,0.85,mPg,0.02,0,0,bkG);
+  const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.96,8),mSp);
+  sp.rotation.x=Math.PI/2; sp.position.set(-0.56,0,0); bkG.add(sp);
+  mkBox(1.02,0.17,0.03,mPe,0,0,0.435,bkG);
+
+  // Перо (правая чаша)
+  const qG=new THREE.Group(); qG.position.set(0.3,-CLEN+0.75,-0.12); rArm.add(qG);
+  mkCyl(0.036,0.036,0.98,10,mQl,0,0,0,qG);
+  mkCyl(0.115,0.036,0.27,12,mQl,0,0.52,0,qG);
+
+  // Физика
   let bAng=0,bV=0,lSw=0,lSV=0,rSw=0,rSV=0,floatT=0;
-  const TGT=0.13,ARM=4.8,BEAMY=3.7,CLEN=3.05;
+  const TGT=0.13;
 
-  /* ── Камера ── */
-  let autoY=0,uY=0,uX=0.12,dvy=0,dvx=0,drag=false,pmx=0,pmy=0;
-  canvas.addEventListener('mousedown',e=>{drag=true;pmx=e.clientX;pmy=e.clientY;dvy=dvx=0;canvas.style.cursor='grabbing';});
-  window.addEventListener('mouseup',()=>{drag=false;canvas.style.cursor='grab';});
-  window.addEventListener('mousemove',e=>{if(!drag)return;dvy=(e.clientX-pmx)*0.012;dvx=(e.clientY-pmy)*0.008;uY+=dvy;uX+=dvx;uX=Math.max(-0.5,Math.min(0.6,uX));pmx=e.clientX;pmy=e.clientY;});
-  canvas.addEventListener('touchstart',e=>{const t=e.touches[0];drag=true;pmx=t.clientX;pmy=t.clientY;},{passive:true});
-  canvas.addEventListener('touchend',()=>drag=false);
-  canvas.addEventListener('touchmove',e=>{if(!drag)return;const t=e.touches[0];uY+=(t.clientX-pmx)*0.012;uX+=(t.clientY-pmy)*0.008;uX=Math.max(-0.5,Math.min(0.6,uX));pmx=t.clientX;pmy=t.clientY;e.preventDefault();},{passive:false});
+  // Камера (drag)
+  let autoY=0,uY=0,uX=0,dvY=0,dvX=0,isDrag=false,pmx=0,pmy=0;
+  canvas.addEventListener('mousedown',e=>{isDrag=true;pmx=e.clientX;pmy=e.clientY;dvY=dvX=0;canvas.style.cursor='grabbing';});
+  window.addEventListener('mouseup',()=>{isDrag=false;canvas.style.cursor='grab';});
+  window.addEventListener('mousemove',e=>{if(!isDrag)return;dvY=(e.clientX-pmx)*0.012;dvX=(e.clientY-pmy)*0.008;uY+=dvY;uX+=dvX;uX=Math.max(-0.5,Math.min(0.6,uX));pmx=e.clientX;pmy=e.clientY;});
+  canvas.addEventListener('touchstart',e=>{const t=e.touches[0];isDrag=true;pmx=t.clientX;pmy=t.clientY;},{passive:true});
+  canvas.addEventListener('touchend',()=>isDrag=false);
+  canvas.addEventListener('touchmove',e=>{if(!isDrag)return;const t=e.touches[0];uY+=(t.clientX-pmx)*0.012;uX+=(t.clientY-pmy)*0.008;uX=Math.max(-0.5,Math.min(0.6,uX));pmx=t.clientX;pmy=t.clientY;e.preventDefault();},{passive:false});
 
-  /* ── Построение сцены ── */
-  function build(){
-    GEO=[];
-    const fy=sin(floatT*0.55)*0.2; // плавное парение
-    const ca=cos(bAng),sa=sin(bAng);
-    const lEx=-ARM*ca, lEy=BEAMY+fy-ARM*sa;
-    const rEx= ARM*ca, rEy=BEAMY+fy+ARM*sa;
-    const lPx=lEx+sin(lSw)*0.38, lPy=lEy-CLEN;
-    const rPx=rEx+sin(rSw)*0.38, rPy=rEy-CLEN;
-
-    // Ступенчатое основание
-    CYL(0,-4.95,0, 2.6,0.38,28,'#3e5270','#4e6280','#2e3e5a');
-    CYL(0,-4.65,0, 2.0,0.32,24,'#364468','#466478','#263454');
-    CYL(0,-4.38,0, 1.25,0.26,20,'#2e3c5e','#3e4c6e','#1e2c4e');
-
-    // Колонна
-    CYL(0,0+fy,0, 0.135,9.3,20,'#8ab2cc','#a0c6e0','#6a90aa');
-
-    // Декоративные золотые кольца вдоль колонны
-    [-3.1,-1.45,0.2,1.85,3.5].forEach(y=>CYL(0,y+fy,0, 0.275,0.21,22,'#C9A84C','#FFD700','#9B7A00'));
-
-    // Навершие
-    CYL(0,4.05+fy,0, 0.215,0.58,18,'#98b8cc','#aecce0','#7898ac');
-    CYL(0,4.55+fy,0, 0.44,0.68,26,'#C9A84C','#FFD700','#9B7A00');
-
-    // Шарнир балки
-    CYL(0,BEAMY+fy,0, 0.25,0.3,22,'#C9A84C','#FFD700','#9B7A00');
-
-    // Балка
-    BEAM(0,BEAMY+fy,0, 4.8,0.1,18,bAng,'#92aecc');
-
-    // Торцевые шарики на балке
-    CYL(lEx,lEy,0, 0.28,0.37,22,'#C9A84C','#FFD700','#9B7A00');
-    CYL(rEx,rEy,0, 0.28,0.37,22,'#C9A84C','#FFD700','#9B7A00');
-
-    // Цепи (звенья)
-    for(let i=0;i<11;i++){
-      const t=(i+0.5)/11;
-      CYL(lEx+(lPx-lEx)*t, lEy+(lPy-lEy)*t, 0, 0.058,0.18,8,'#C9A84C');
-      CYL(rEx+(rPx-rEx)*t, rEy+(rPy-rEy)*t, 0, 0.058,0.18,8,'#C9A84C');
-    }
-
-    // Чаши
-    PAN(lPx,lPy,0, 1.58,0.66,22,9,'#C9A84C');
-    PAN(rPx,rPy,0, 1.58,0.66,22,9,'#C9A84C');
-
-    // Монеты в левой чаше (8 внизу + 3 поверх)
-    [[0,0],[0.64,0.18],[-0.64,0.18],[0.32,-0.54],[-0.32,-0.54],[0,0.64],[0.6,-0.22],[-0.58,-0.18]].forEach(([dx,dz])=>{
-      CYL(lPx+dx,lPy+0.12,dz, 0.3,0.1,18,'#DAA520','#FFD700','#8B6914');
-    });
-    [[0.1,0.08],[-0.12,-0.06],[0.44,0.32]].forEach(([dx,dz])=>{
-      CYL(lPx+dx,lPy+0.22,dz, 0.28,0.1,18,'#DAA520','#FFD700','#8B6914');
-    });
-
-    // Книга в правой чаше
-    BOX(rPx-0.08,rPy+0.19,0, 1.18,0.24,0.96,'#9B2020','#6a0808','#8a1818','#6a0808','#4a0808','#8a1818');
-    BOX(rPx-0.06,rPy+0.19,0, 1.04,0.19,0.85,'#FFFAF0','#F2ECE0','#FFFCF0','#F0EAD6','#9B2020','#F8F0D8');
-    // Торцы страниц
-    BOX(rPx-0.06,rPy+0.19,0.435, 1.02,0.17,0.025,'#EAE2CA','#FFFCF0','#EAE2CA','#EAE2CA','#9B2020','#EAE2CA');
-
-    // Перо
-    CYL(rPx+0.3,rPy+0.74,-0.12, 0.038,0.96,10,'#D8DAFF','#E8EAFF','#C2C4EE');
-    CYL(rPx+0.28,rPy+0.9,-0.13, 0.115,0.26,12,'#DBDCFF','#EAECFF','#C4C6EE');
-  }
-
-  /* ── Рендер ── */
-  function render(M){
-    const dl=[];
-    for(const f of GEO){
-      const wv=f.v.map(v=>mv(M,v));
-      const wn=mv(M,f.n);
-      // Back-face culling: пропускаем грани, смотрящие от камеры
-      if(wn[2]<0)continue;
-      const avgZ=wv.reduce((s,v)=>s+v[2],0)/wv.length;
-      const pts=wv.map(prj);
-      if(pts.some(p=>!p))continue;
-      dl.push({pts,z:avgZ,c:f.c,n:wn});
-    }
-    dl.sort((a,b)=>b.z-a.z); // Painter's algorithm
-
-    ctx.clearRect(0,0,W,H);
-
-    // Тень под моделью
-    const shg=ctx.createRadialGradient(W/2,H*0.88,4,W/2,H*0.88,105);
-    shg.addColorStop(0,'rgba(0,8,28,0.28)'); shg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=shg; ctx.beginPath(); ctx.ellipse(W/2,H*0.88,92,16,0,0,Math.PI*2); ctx.fill();
-
-    // Фоновое свечение
-    const glo=ctx.createRadialGradient(W/2,H*0.44,25,W/2,H*0.44,225);
-    glo.addColorStop(0,'rgba(46,95,172,0.17)'); glo.addColorStop(0.6,'rgba(30,60,130,0.06)'); glo.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=glo; ctx.fillRect(0,0,W,H);
-
-    for(const d of dl){
-      ctx.beginPath();
-      ctx.moveTo(d.pts[0][0],d.pts[0][1]);
-      for(let i=1;i<d.pts.length;i++)ctx.lineTo(d.pts[i][0],d.pts[i][1]);
-      ctx.closePath();
-      ctx.fillStyle=shade(d.c,d.n); ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,0.055)'; ctx.lineWidth=0.28; ctx.stroke();
-    }
-  }
-
-  /* ── Главный цикл ── */
-  function loop(){
-    requestAnimationFrame(loop);
+  // Анимация
+  function tick(){
+    requestAnimationFrame(tick);
     floatT+=0.016;
+    root.position.y=Math.sin(floatT*0.55)*0.22; // парение
+
     bV+=(TGT-bAng)*0.034; bV*=0.955; bAng+=bV;
+    beamG.rotation.z=-bAng;
+
+    // Маятник чаш (компенсируем наклон балки + раскачка)
     lSV+=(-lSw*0.052+bV*1.45); lSV*=0.92; lSw+=lSV;
     rSV+=(-rSw*0.052-bV*1.45); rSV*=0.92; rSw+=rSV;
-    if(!drag){dvy*=0.965;dvx*=0.95;uY+=dvy;uX+=dvx;autoY+=0.0032;}
-    build();
-    render(mm(Ry(autoY+uY),Rx(uX)));
+    lArm.rotation.z=bAng+lSw*0.28;
+    rArm.rotation.z=bAng+rSw*0.28;
+
+    if(!isDrag){dvY*=0.965;dvX*=0.95;uY+=dvY;uX+=dvX;autoY+=0.003;}
+    root.rotation.y=autoY+uY;
+    root.rotation.x=uX;
+    renderer.render(scene,camera);
   }
-  loop();
+  tick();
+  } // end init3D
 })();
 
 /* ============================================================
