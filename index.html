@@ -787,6 +787,7 @@
 
   // Главная группа
   const root=new THREE.Group(); scene.add(root);
+  root.scale.set(0.68,0.68,0.68); // вписываем в рамку
 
   // Основание (3 ступени)
   mkCyl(2.6,2.8,0.38,32,mB1,0,-5.15,0,root);
@@ -828,27 +829,58 @@
   const lBowl=mkBowl(lArm); lBowl.position.set(0,-CLEN,0);
   const rBowl=mkBowl(rArm); rBowl.position.set(0,-CLEN,0);
 
-  // Монеты (левая чаша)
-  const cGeo=new THREE.CylinderGeometry(0.31,0.31,0.1,20);
-  [[0,0],[0.62,0.18],[-0.62,0.18],[0.3,-0.52],[-0.3,-0.52],[0,0.62],[0.6,-0.22],[-0.58,-0.18]].forEach(([dx,dz],i)=>{
-    const c=new THREE.Mesh(cGeo,i%2===0?mCo:mCS); c.position.set(dx,-CLEN+0.12,dz); c.castShadow=true; lArm.add(c);
-  });
-  [[0.1,0.08],[-0.12,-0.06],[0.44,0.32]].forEach(([dx,dz])=>{
-    const c=new THREE.Mesh(cGeo,mCS); c.position.set(dx,-CLEN+0.22,dz); c.castShadow=true; lArm.add(c);
-  });
+  // ── Бедняк (левая чаша) ──
+  {
+    const mSk=new THREE.MeshStandardMaterial({color:0xD4956A,metalness:0,roughness:0.85});
+    const mRg=new THREE.MeshStandardMaterial({color:0x7a6045,metalness:0,roughness:0.98});
+    const mHr=new THREE.MeshStandardMaterial({color:0x2a1a0a,metalness:0,roughness:0.9});
+    const pG=new THREE.Group(); pG.position.set(0,-CLEN-0.4,0); lArm.add(pG);
+    const ap=(mesh,x=0,y=0,z=0,rx=0,ry=0,rz=0)=>{
+      mesh.position.set(x,y,z); mesh.rotation.set(rx,ry,rz);
+      mesh.castShadow=true; pG.add(mesh); return mesh;
+    };
+    // Голова — наклонена вперёд (поникшая)
+    ap(new THREE.Mesh(new THREE.SphereGeometry(0.22,14,10),mSk),0,0.9,0.08,0.42);
+    // Волосы (верхняя полусфера)
+    ap(new THREE.Mesh(new THREE.SphereGeometry(0.235,12,8,0,Math.PI*2,0,Math.PI*0.53),mHr),0,0.9,0.08,0.42);
+    // Тело (ссутулившееся, худое)
+    ap(new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.46,10),mRg),0,0.47,0.04,0.2);
+    // Ноги — согнуты, сидячая поза
+    [[-0.1],[0.1]].forEach(([dx])=>{
+      ap(new THREE.Mesh(new THREE.CylinderGeometry(0.065,0.065,0.32,8),mRg),dx,0.22,0.13,1.22);
+      ap(new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.27,8),mRg),dx,0.07,0.35,-0.9);
+      ap(new THREE.Mesh(new THREE.BoxGeometry(0.1,0.06,0.14),mRg),dx,-0.04,0.46);
+    });
+    // Руки — безнадёжно опущены, пустые ладони
+    [[-0.21,-1],[0.21,1]].forEach(([ox,side])=>{
+      ap(new THREE.Mesh(new THREE.CylinderGeometry(0.053,0.053,0.34,8),mRg),ox,0.51,0.06,0.22,0,side*1.05);
+      // Кисть (открытая ладонь — ничего нет)
+      ap(new THREE.Mesh(new THREE.SphereGeometry(0.067,8,6),mSk),ox*2.05,0.35,0.1);
+    });
+  }
 
-  // Книга (правая чаша)
-  const bkG=new THREE.Group(); bkG.position.set(-0.08,-CLEN+0.19,0); rArm.add(bkG);
-  mkBox(1.18,0.24,0.96,mBk,0,0,0,bkG);
-  mkBox(1.04,0.19,0.85,mPg,0.02,0,0,bkG);
-  const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.96,8),mSp);
-  sp.rotation.x=Math.PI/2; sp.position.set(-0.56,0,0); bkG.add(sp);
-  mkBox(1.02,0.17,0.03,mPe,0,0,0.435,bkG);
-
-  // Перо (правая чаша)
-  const qG=new THREE.Group(); qG.position.set(0.3,-CLEN+0.75,-0.12); rArm.add(qG);
-  mkCyl(0.036,0.036,0.98,10,mQl,0,0,0,qG);
-  mkCyl(0.115,0.036,0.27,12,mQl,0,0.52,0,qG);
+  // ── Монеты / деньги (правая чаша) — горка золота ──
+  {
+    const cG=new THREE.CylinderGeometry(0.31,0.31,0.1,20);
+    // Нижний слой (12 монет)
+    [[0,0],[0.6,0.18],[-0.6,0.18],[0.3,-0.52],[-0.3,-0.52],[0,0.6],
+     [0.6,-0.2],[-0.58,-0.18],[0.35,0.38],[-0.35,0.38],[0.35,-0.35],[-0.55,0]
+    ].forEach(([dx,dz],i)=>{
+      const c=new THREE.Mesh(cG,i%2===0?mCo:mCS);
+      c.position.set(dx,-CLEN+0.12,dz); c.castShadow=true; rArm.add(c);
+    });
+    // Второй слой (6 монет)
+    [[0.1,0.1],[-0.1,-0.1],[0.45,0.28],[-0.42,0.2],[0.15,-0.38],[-0.2,0.4]
+    ].forEach(([dx,dz])=>{
+      const c=new THREE.Mesh(cG,mCS);
+      c.position.set(dx,-CLEN+0.22,dz); c.castShadow=true; rArm.add(c);
+    });
+    // Стопка по центру (3 монеты)
+    [0.32,0.42,0.52].forEach(dy=>{
+      const c=new THREE.Mesh(cG,mGS);
+      c.position.set(0,-CLEN+dy,0); c.castShadow=true; rArm.add(c);
+    });
+  }
 
   // Физика
   let bAng=0,bV=0,lSw=0,lSV=0,rSw=0,rSV=0,floatT=0;
